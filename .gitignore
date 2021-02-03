@@ -4,3 +4,5 @@ samples/mandelbrot
 samples/fib
 samples/wc
 samples/hello
+peda-session*
+.gdb*
