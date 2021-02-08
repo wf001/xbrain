@@ -15,7 +15,7 @@
 
 #define MEMORY_SIZE 30000
 
-const char *program_name = "bf-x86";
+const char *program_name = "xbc";
 #define FATAL(message)                                      \
     do {                                                    \
         fprintf(stderr, "%s: %s\n", program_name, message); \
@@ -429,10 +429,13 @@ int main(int argc, char **argv) {
     struct program program = PROGRAM_INIT;
     FILE *source = fopen(argv[optind], "r");
     if (source == NULL) FATAL("could not open input file");
+    // PARSE
     program_parse(&program, source);
     fclose(source);
 
+    // COMPILE
     struct asmbuf *buf = compile(&program, MODE_STANDALONE);
+    // BUILD
     FILE *elf = fopen(output, "wb");
     if (elf == NULL) FATAL("could not open output file");
     elf_write(buf, elf);
