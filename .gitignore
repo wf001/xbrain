@@ -6,3 +6,4 @@ samples/wc
 samples/hello
 peda-session*
 .gdb*
+out
