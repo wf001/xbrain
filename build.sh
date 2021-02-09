@@ -1,1 +1,3 @@
-make && make test && make remove
+make && \
+    make test && \
+    make clean

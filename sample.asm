@@ -1,49 +1,57 @@
 bits 64
-section .text
 global _start
 
 _start:
-    mov rax, 0x4C
-    and rax, 0x2E
-    mov r11, rax
-    jmp .loop
+    mov rax, 0x77FFAC
+    and rax, 0x39333AA
+    mov r13, rax
+    mov r12, 0x1
+    mov rbx, 0x0
+    cmp r13, rbx
+    jz zero
+    jmp loop
 
+zero:
+    add r13, 0x30
+    push r13
+    inc r14
+    jmp print
     
-.loop:
-    cmp rax, 0x0
-    jz .print
-    and r11, 0xf
-    cmp r11, 0xa
-    jae .a
-    jb .b
+loop:
+    cmp rax, rbx
+    jz print
+    and r13, 0xf
+    cmp r13, 0xa
+    jae alfa
+    jb num
 
-.a:
-    add r11, 0x37
-    jmp .c
-.b:
-    add r11, 0x30
-    jmp .c
+alfa:
+    add r13, 0x37
+    jmp save
+num:
+    add r13, 0x30
+    jmp save
 
-.c
-    push r11
-    tar rax, 4
-    mov r11, rax
-    inc r12
-    jmp .loop
+save:
+    push r13
+    sar rax, 4
+    mov r13, rax
+    inc r14
+    jmp loop
 
-.print:
+print:
     mov rsi, rsp
-    mov rdi, 0x1
-    mov rax, 0x1
-    mov rdx, 0x1
+    mov rdi, r12
+    mov rax, r12
+    mov rdx, r12
     syscall
     pop r13
 
-    dec r12
-    cmp r12, 0x0
-    jz .hlt
-    jmp .print
+    dec r14
+    cmp r14, rbx
+    jz hlt
+    jmp print
 
-.hlt:
+hlt:
     mov rax, 0x3c
     syscall

@@ -1,5 +1,5 @@
-#define _BSD_SOURCE    // MAP_ANONYMOUS
-#define _POSIX_SOURCE  // fileno
+#define _BSD_SOURCE      // MAP_ANONYMOUS
+#define _DEFAULT_SOURCE  // fileno
 #include <assert.h>
 #include <elf.h>
 #include <getopt.h>
@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #define MEMORY_SIZE 30000
+//#define DEBUG
 
 const char *program_name = "xbc";
 #define FATAL(message)                                      \
@@ -21,6 +22,16 @@ const char *program_name = "xbc";
         fprintf(stderr, "%s: %s\n", program_name, message); \
         exit(EXIT_FAILURE);                                 \
     } while (0)
+
+#ifdef DEBUG
+#define _info(x, f) printf("### " #x " = %" #f "\n", (x));
+#define _sep() printf("%s", "==========================\n");
+
+#else
+#define _info(x, f) 1 ? (void)0 : printf
+#define _sep() 1 ? (void)0 : printf
+
+#endif
 
 enum ins {
     INS_MOVE,
@@ -109,6 +120,10 @@ void program_add(struct program *p, enum ins ins, long operand) {
     p->ins[p->count].ins = ins;
     p->ins[p->count].operand = operand;
     p->count++;
+    _sep();
+    _info(p->ins[p->count].ins, d);
+    _info(p->ins[p->count].operand, d);
+    _info(p->count, d);
 }
 
 void program_mark(struct program *p) {
@@ -249,9 +264,12 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
 
     /* rsi - data pointer
      * rdi - syscall argument
-     * rax - temp
+     * rax - temp and store return value, syscall number
      * rbx - zero register
      * r12 - one register
+     * r13 - temp
+     * r14 - counter
+     *
      */
     uint32_t *table = malloc(sizeof(table[0]) * program->count);
     for (size_t i = 0; i < program->count; i++) {
