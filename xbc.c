@@ -1,10 +1,5 @@
-#define _BSD_SOURCE      // MAP_ANONYMOUS
 #define _DEFAULT_SOURCE  // fileno
-#include <assert.h>
 #include <elf.h>
-#include <getopt.h>
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +28,11 @@ const char *program_name = "xbc";
 
 #endif
 
+#define PROGRAM_INIT \
+    { 0, 0, NULL, 0, 0, NULL }
+#define PROGRAM \
+    (struct program) { 0 }
+
 enum ins {
     INS_MOVE,
     INS_MUTATE,
@@ -41,22 +41,9 @@ enum ins {
     INS_BRANCH,
     INS_JUMP,
     INS_HALT,
-    INS_CLEAR,
-    INS_ADD,
-    INS_NOP
 };
 
-const char *instruction_name(enum ins ins) {
-    static const char *const names[] = {"MOVE",   "MUTATE", "IN",   "OUT",
-                                        "BRANCH", "JUMP",   "HALT", "CLEAR",
-                                        "ADD",    "NOP"};
-    return names[ins];
-}
-
-int instruction_arity(enum ins ins) {
-    static const int arity[] = {1, 1, 0, 0, 1, 1, 0, 0, 0};
-    return arity[ins];
-}
+enum mode { MODE_OPEN, MODE_FUNCTION, MODE_STANDALONE };
 
 struct program {
     size_t max, count;
@@ -67,27 +54,23 @@ struct program {
     size_t markers_max, markers_count;
     long *markers;
 };
+struct asmbuf {
+    size_t size, fill;
+    uint8_t code[];
+};
 
-#define PROGRAM_INIT \
-    { 0, 0, NULL, 0, 0, NULL }
-#define PROGRAM \
-    (struct program) { 0 }
+void mark_program(struct program *);
+long unmark_program(struct program *);
+void add_program(struct program *, enum ins, long);
+void free_program(struct program *);
+void parse_program(struct program *, FILE *);
 
-void program_mark(struct program *);
-long program_unmark(struct program *);
-void program_add(struct program *, enum ins, long);
-void program_free(struct program *);
-void program_parse(struct program *, FILE *);
-void program_optimize(struct program *, int level);
-void program_strip_nops(struct program *);
-void program_print(const struct program *, FILE *);
-
-void program_free(struct program *p) {
+void free_program(struct program *p) {
     free(p->ins);
     free(p->markers);
 }
 
-void program_add(struct program *p, enum ins ins, long operand) {
+void add_program(struct program *p, enum ins ins, long operand) {
     if (p->count == p->max) {
         if (p->max == 0)
             p->max = 256;
@@ -98,10 +81,10 @@ void program_add(struct program *p, enum ins ins, long operand) {
     }
     switch (ins) {
         case INS_BRANCH:
-            program_mark(p);
+            mark_program(p);
             break;
         case INS_JUMP: {
-            long sibling = program_unmark(p);
+            long sibling = unmark_program(p);
             if (sibling < 0) FATAL("unmatched ']'");
             p->ins[sibling].operand = p->count + 1;
             operand = sibling;
@@ -111,10 +94,6 @@ void program_add(struct program *p, enum ins ins, long operand) {
         case INS_IN:
         case INS_OUT:
         case INS_HALT:
-        case INS_CLEAR:
-        case INS_ADD:
-        case INS_NOP:
-            /* Nothing */
             break;
     }
     p->ins[p->count].ins = ins;
@@ -126,7 +105,7 @@ void program_add(struct program *p, enum ins ins, long operand) {
     _info(p->count, d);
 }
 
-void program_mark(struct program *p) {
+void mark_program(struct program *p) {
     if (p->markers_count == p->markers_max) {
         if (p->markers_max == 0)
             p->markers_max = 16;
@@ -138,40 +117,40 @@ void program_mark(struct program *p) {
     p->markers[p->markers_count++] = p->count;
 }
 
-long program_unmark(struct program *p) {
+long unmark_program(struct program *p) {
     if (p->markers_count > 0)
         return p->markers[--p->markers_count];
     else
         return -1;
 }
 
-void program_parse(struct program *p, FILE *in) {
+void parse_program(struct program *p, FILE *in) {
     int c;
     while ((c = fgetc(in)) != EOF) {
         switch (c) {
             case '+':
-                program_add(p, INS_MUTATE, 1);
+                add_program(p, INS_MUTATE, 1);
                 break;
             case '-':
-                program_add(p, INS_MUTATE, -1);
+                add_program(p, INS_MUTATE, -1);
                 break;
             case '>':
-                program_add(p, INS_MOVE, 1);
+                add_program(p, INS_MOVE, 1);
                 break;
             case '<':
-                program_add(p, INS_MOVE, -1);
+                add_program(p, INS_MOVE, -1);
                 break;
             case '.':
-                program_add(p, INS_OUT, 0);
+                add_program(p, INS_OUT, 0);
                 break;
             case ',':
-                program_add(p, INS_IN, 0);
+                add_program(p, INS_IN, 0);
                 break;
             case '[':
-                program_add(p, INS_BRANCH, 0);
+                add_program(p, INS_BRANCH, 0);
                 break;
             case ']':
-                program_add(p, INS_JUMP, 0);
+                add_program(p, INS_JUMP, 0);
                 break;
             default:
                 /* Nothing */
@@ -179,22 +158,17 @@ void program_parse(struct program *p, FILE *in) {
         }
     }
     if (p->markers_count > 0) FATAL("unmatched '['");
-    program_add(p, INS_HALT, 0);
+    add_program(p, INS_HALT, 0);
 }
 
-struct asmbuf {
-    size_t size, fill;
-    uint8_t code[];
-};
+struct asmbuf *create_asmbuf(void);
+void free_asmbuf(struct asmbuf *);
+void finalize_asmbuf(struct asmbuf *);
+void add_asmbuf_ins(struct asmbuf *, int, uint64_t);
+void add_asmbuf_immediate(struct asmbuf *, int, const void *);
+void add_asmbuf_syscall(struct asmbuf *, int);
 
-struct asmbuf *asmbuf_create(void);
-void asmbuf_free(struct asmbuf *);
-void asmbuf_finalize(struct asmbuf *);
-void asmbuf_ins(struct asmbuf *, int, uint64_t);
-void asmbuf_immediate(struct asmbuf *, int, const void *);
-void asmbuf_syscall(struct asmbuf *, int);
-
-struct asmbuf *asmbuf_create(void) {
+struct asmbuf *create_asmbuf(void) {
     long page_size = sysconf(_SC_PAGESIZE);
     int prot = PROT_READ | PROT_WRITE;
     int flags = MAP_ANONYMOUS | MAP_PRIVATE;
@@ -204,63 +178,61 @@ struct asmbuf *asmbuf_create(void) {
     return buf;
 }
 
-void asmbuf_free(struct asmbuf *buf) { munmap(buf, buf->size); }
+void free_asmbuf(struct asmbuf *buf) { munmap(buf, buf->size); }
 
-void asmbuf_finalize(struct asmbuf *buf) {
+void finalize_asmbuf(struct asmbuf *buf) {
     mprotect(buf, buf->size, PROT_READ | PROT_EXEC);
 }
 
-void asmbuf_ins(struct asmbuf *buf, int size, uint64_t ins) {
+void add_asmbuf_ins(struct asmbuf *buf, int size, uint64_t ins) {
     for (int i = size - 1; i >= 0; i--)
         buf->code[buf->fill++] = (ins >> (i * 8)) & 0xff;
 }
 
-void asmbuf_immediate(struct asmbuf *buf, int size, const void *value) {
+void add_asmbuf_immediate(struct asmbuf *buf, int size, const void *value) {
     memcpy(buf->code + buf->fill, value, size);
     buf->fill += size;
 }
 
-void asmbuf_syscall(struct asmbuf *buf, int syscall) {
+void add_asmbuf_syscall(struct asmbuf *buf, int syscall) {
     if (syscall == 0) {
-        asmbuf_ins(buf, 2, 0x31C0);  // xor  eax, eax
+        add_asmbuf_ins(buf, 2, 0x31C0);  // xor  eax, eax
     } else if (syscall == 1) {
-        asmbuf_ins(buf, 3, 0x4C89E0);  // mov rax, r12
+        add_asmbuf_ins(buf, 3, 0x4C89E0);  // mov rax, r12
     } else {
-        asmbuf_ins(buf, 1, 0xB8);  // mov  rax, syscall
+        add_asmbuf_ins(buf, 1, 0xB8);  // mov  rax, syscall
         uint32_t n = syscall;
-        asmbuf_immediate(buf, 4, &n);
+        add_asmbuf_immediate(buf, 4, &n);
     }
-    asmbuf_ins(buf, 2, 0x0F05);  // syscall
+    add_asmbuf_ins(buf, 2, 0x0F05);  // syscall
 }
-
-enum mode { MODE_OPEN, MODE_FUNCTION, MODE_STANDALONE };
 
 struct asmbuf *compile(const struct program *, enum mode);
 
 struct asmbuf *compile(const struct program *program, enum mode mode) {
     uint32_t memory_size = MEMORY_SIZE;
-    struct asmbuf *buf = asmbuf_create();
+    struct asmbuf *buf = create_asmbuf();
 
     /* Clear zero register */
     if (mode == MODE_FUNCTION) {
-        asmbuf_ins(buf, 1, 0x53);    // push rbx
-        asmbuf_ins(buf, 2, 0x4154);  // push r12
+        add_asmbuf_ins(buf, 1, 0x53);    // push rbx
+        add_asmbuf_ins(buf, 2, 0x4154);  // push r12
     }
-    asmbuf_ins(buf, 2, 0x31dB);          // xor ebx, ebx
-    asmbuf_ins(buf, 6, 0x41BC01000000);  // mov r12, 1
+    add_asmbuf_ins(buf, 2, 0x31dB);          // xor ebx, ebx
+    add_asmbuf_ins(buf, 6, 0x41BC01000000);  // mov r12, 1
 
     /* Allocate BF array on stack */
-    asmbuf_ins(buf, 3, 0x4881EC);  // sub  rsp, X
-    asmbuf_immediate(buf, 4, &memory_size);
-    asmbuf_ins(buf, 3, 0x4889E6);      // mov  rsi, rsp
-    asmbuf_ins(buf, 5, 0xBA01000000);  // mov  edx, 0x1
+    add_asmbuf_ins(buf, 3, 0x4881EC);  // sub  rsp, X
+    add_asmbuf_immediate(buf, 4, &memory_size);
+    add_asmbuf_ins(buf, 3, 0x4889E6);      // mov  rsi, rsp
+    add_asmbuf_ins(buf, 5, 0xBA01000000);  // mov  edx, 0x1
 
     /* Clear BF array */
-    asmbuf_ins(buf, 2, 0x30C0);    // xor  al, al
-    asmbuf_ins(buf, 3, 0x4889E7);  // mov  rdi, rsp
-    asmbuf_ins(buf, 1, 0xB9);      // mov  rcx, X
-    asmbuf_immediate(buf, 4, &memory_size);
-    asmbuf_ins(buf, 2, 0xF3AA);  // rep stosb
+    add_asmbuf_ins(buf, 2, 0x30C0);    // xor  al, al
+    add_asmbuf_ins(buf, 3, 0x4889E7);  // mov  rdi, rsp
+    add_asmbuf_ins(buf, 1, 0xB9);      // mov  rcx, X
+    add_asmbuf_immediate(buf, 4, &memory_size);
+    add_asmbuf_ins(buf, 2, 0xF3AA);  // rep stosb
 
     /* rsi - data pointer
      * rdi - syscall argument
@@ -280,91 +252,75 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
             case INS_MOVE:
                 if (operand > -256 && operand < 256) {
                     if (operand > 0) {
-                        asmbuf_ins(buf, 3, 0x4883C6);  // add  rsi, byte X
+                        add_asmbuf_ins(buf, 3, 0x4883C6);  // add  rsi, byte X
                     } else {
                         operand *= -1;
-                        asmbuf_ins(buf, 3, 0x4883EE);  // sub  rsi, byte X
+                        add_asmbuf_ins(buf, 3, 0x4883EE);  // sub  rsi, byte X
                     }
-                    asmbuf_immediate(buf, 1, &operand);
+                    add_asmbuf_immediate(buf, 1, &operand);
                 } else {
                     if (operand > 0) {
-                        asmbuf_ins(buf, 3, 0x4881C6);  // add  rsi, X
+                        add_asmbuf_ins(buf, 3, 0x4881C6);  // add  rsi, X
                     } else {
                         operand *= -1;
-                        asmbuf_ins(buf, 3, 0x4881EE);  // sub  rsi, X
+                        add_asmbuf_ins(buf, 3, 0x4881EE);  // sub  rsi, X
                     }
-                    asmbuf_immediate(buf, 4, &operand);
+                    add_asmbuf_immediate(buf, 4, &operand);
                 }
                 break;
             case INS_MUTATE:
                 if (operand > 0) {
-                    asmbuf_ins(buf, 2, 0x8006);  // add  byte [rsi], X
+                    add_asmbuf_ins(buf, 2, 0x8006);  // add  byte [rsi], X
                 } else {
                     operand *= -1;
-                    asmbuf_ins(buf, 2, 0x802E);  // sub  byte [rsi], X
+                    add_asmbuf_ins(buf, 2, 0x802E);  // sub  byte [rsi], X
                 }
-                asmbuf_immediate(buf, 1, &operand);
-                break;
-            case INS_CLEAR:
-                asmbuf_ins(buf, 2, 0x881e);  // mov  [rsi], bl
+                add_asmbuf_immediate(buf, 1, &operand);
                 break;
             case INS_IN:
-                asmbuf_ins(buf, 3, 0x4831FF);  // xor  rdi, rdi
-                asmbuf_syscall(buf, SYS_read);
+                add_asmbuf_ins(buf, 3, 0x4831FF);  // xor  rdi, rdi
+                add_asmbuf_syscall(buf, SYS_read);
                 break;
             case INS_OUT:
-                asmbuf_ins(buf, 3, 0x4C89E7);  // mov  rdi, r12
-                asmbuf_syscall(buf, SYS_write);
+                add_asmbuf_ins(buf, 3, 0x4C89E7);  // mov  rdi, r12
+                add_asmbuf_syscall(buf, SYS_write);
                 break;
             case INS_BRANCH: {
                 uint32_t delta = 0;
-                asmbuf_ins(buf, 2, 0x381E);        // cmp  [rsi], bl
-                asmbuf_ins(buf, 2, 0x0F84);        // jz
-                asmbuf_immediate(buf, 4, &delta);  // patched by JUMP ']'
+                add_asmbuf_ins(buf, 2, 0x381E);        // cmp  [rsi], bl
+                add_asmbuf_ins(buf, 2, 0x0F84);        // jz
+                add_asmbuf_immediate(buf, 4, &delta);  // patched by JUMP ']'
             } break;
             case INS_JUMP: {
                 uint32_t delta = table[operand];
                 delta -= buf->fill + 5;
-                asmbuf_ins(buf, 1, 0xE9);  // jmp delta
-                asmbuf_immediate(buf, 4, &delta);
+                add_asmbuf_ins(buf, 1, 0xE9);  // jmp delta
+                add_asmbuf_immediate(buf, 4, &delta);
                 void *jz = &buf->code[table[operand] + 4];
                 uint32_t patch = buf->fill - table[operand] - 8;
                 memcpy(jz, &patch, 4);  // patch previous branch '['
             } break;
-            case INS_ADD: {
-                asmbuf_ins(buf, 2, 0x8A06);  // mov  al, [rsi]
-                uint32_t delta = operand;
-                if (operand >= -128 && operand < 127) {
-                    asmbuf_ins(buf, 2, 0x0046);  // add  [rsi+delta], al
-                    asmbuf_immediate(buf, 1, &delta);
-                } else {
-                    asmbuf_ins(buf, 2, 0x0086);  // add  [rsi+delta], al
-                    asmbuf_immediate(buf, 4, &delta);
-                }
-            } break;
             case INS_HALT:
                 if (mode == MODE_FUNCTION) {
-                    asmbuf_ins(buf, 3, 0x4881C4);  // add  rsp, X
-                    asmbuf_immediate(buf, 4, &memory_size);
-                    asmbuf_ins(buf, 2, 0x415C);  // pop r12
-                    asmbuf_ins(buf, 1, 0x5B);    // pop rbx
-                    asmbuf_ins(buf, 1, 0xC3);    // ret
+                    add_asmbuf_ins(buf, 3, 0x4881C4);  // add  rsp, X
+                    add_asmbuf_immediate(buf, 4, &memory_size);
+                    add_asmbuf_ins(buf, 2, 0x415C);  // pop r12
+                    add_asmbuf_ins(buf, 1, 0x5B);    // pop rbx
+                    add_asmbuf_ins(buf, 1, 0xC3);    // ret
                 } else if (mode == MODE_STANDALONE) {
-                    asmbuf_ins(buf, 3, 0x4831FF);  // xor  rdi, rdi
-                    asmbuf_syscall(buf, SYS_exit);
+                    add_asmbuf_ins(buf, 3, 0x4831FF);  // xor  rdi, rdi
+                    add_asmbuf_syscall(buf, SYS_exit);
                 }
-                break;
-            case INS_NOP:
                 break;
         }
     }
     free(table);
 
-    asmbuf_finalize(buf);
+    finalize_asmbuf(buf);
     return buf;
 }
 
-void elf_write(struct asmbuf *buf, FILE *elf) {
+void write_elf(struct asmbuf *buf, FILE *elf) {
     uint64_t entry = 0x400000 + sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr);
     Elf64_Ehdr ehdr = {
         .e_ident =
@@ -448,7 +404,7 @@ int main(int argc, char **argv) {
     FILE *source = fopen(argv[optind], "r");
     if (source == NULL) FATAL("could not open input file");
     // PARSE
-    program_parse(&program, source);
+    parse_program(&program, source);
     fclose(source);
 
     // COMPILE
@@ -456,11 +412,11 @@ int main(int argc, char **argv) {
     // BUILD
     FILE *elf = fopen(output, "wb");
     if (elf == NULL) FATAL("could not open output file");
-    elf_write(buf, elf);
+    write_elf(buf, elf);
     fchmod(fileno(elf), 0755);
     fclose(elf);
-    asmbuf_free(buf);
+    free_asmbuf(buf);
 
-    program_free(&program);
+    free_program(&program);
     return 0;
 }
