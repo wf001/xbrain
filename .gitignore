@@ -7,3 +7,6 @@ samples/hello
 peda-session*
 .gdb*
 out
+xbc
+ws/a
+ws/b
