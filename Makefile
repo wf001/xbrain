@@ -7,6 +7,8 @@ test:
 	./xbc ws/b.xb
 	./xbc ws/c.xb
 	./xbc ws/d.xb
+	./xbc ws/e.xb
+	./xbc ws/f.xb
 	./test_xbc.sh
 
 clean:
@@ -15,3 +17,5 @@ clean:
 	rm -rf ws/b
 	rm -rf ws/c
 	rm -rf ws/d
+	rm -rf ws/e
+	rm -rf ws/f

@@ -1,10 +1,12 @@
 bits 64
 global _start
-// do AND operation, then output it with hex format.
+
 _start:
-    mov rax, 0x77FFAC
-    and rax, 0x39333AA
-    mov r13, rax
+    push 0x123
+    mov rsi, rsp
+
+    pop r13
+    mov rax, r13
     mov r12, 0x1
     mov rbx, 0x0
     cmp r13, rbx
