@@ -1,14 +1,14 @@
 #!/bin/bash
 
 
-ope_arr=("a" "b" "c" "d")
-expect_arr=(3 0 "Hello World!" 8)
+ope_arr=("a" "b" "c" "d" "e" "f")
+expect_arr=(3 0 "Hello World!" 8 1 "G")
 prefix="./ws/"
 
 echo "Starting test."
 echo 
 
-for i in {0..3}; do
+for i in {0..5}; do
     res=$(${prefix}${ope_arr[i]})
     expect=${expect_arr[i]}
 

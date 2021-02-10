@@ -9,7 +9,9 @@
 #include <unistd.h>
 
 #define MEMORY_SIZE 30000
-//#define DEBUG
+// Decimal number of Line Feed in ascii code.
+#define LF 10
+#define DEBUG
 
 const char *program_name = "xbc";
 #define FATAL(message)                                      \
@@ -34,13 +36,14 @@ const char *program_name = "xbc";
     (struct program) { 0 }
 
 enum ins {
-    INS_MOVE,
-    INS_MUTATE,
-    INS_IN,
-    INS_OUT,
-    INS_BRANCH,
-    INS_JUMP,
-    INS_HALT,
+    MOVE,
+    MUTATE,
+    IN,
+    OUT_ASCII,
+    OUT_HEX,
+    BRANCH,
+    JUMP,
+    HALT,
 };
 
 enum mode { MODE_OPEN, MODE_FUNCTION, MODE_STANDALONE };
@@ -80,20 +83,21 @@ void add_program(struct program *p, enum ins ins, long operand) {
         p->ins = realloc(p->ins, size);
     }
     switch (ins) {
-        case INS_BRANCH:
+        case BRANCH:
             mark_program(p);
             break;
-        case INS_JUMP: {
+        case JUMP: {
             long sibling = unmark_program(p);
             if (sibling < 0) FATAL("unmatched ']'");
             p->ins[sibling].operand = p->count + 1;
             operand = sibling;
         } break;
-        case INS_MOVE:
-        case INS_MUTATE:
-        case INS_IN:
-        case INS_OUT:
-        case INS_HALT:
+        case MOVE:
+        case MUTATE:
+        case IN:
+        case OUT_ASCII:
+        case OUT_HEX:
+        case HALT:
             break;
     }
     p->ins[p->count].ins = ins;
@@ -101,7 +105,6 @@ void add_program(struct program *p, enum ins ins, long operand) {
     p->count++;
     _sep();
     _info(p->ins[p->count].ins, d);
-    _info(p->ins[p->count].operand, d);
     _info(p->count, d);
 }
 
@@ -129,36 +132,47 @@ void parse_program(struct program *p, FILE *in) {
     while ((c = fgetc(in)) != EOF) {
         switch (c) {
             case '+':
-                add_program(p, INS_MUTATE, 1);
+                add_program(p, MUTATE, 1);
                 break;
             case '-':
-                add_program(p, INS_MUTATE, -1);
+                add_program(p, MUTATE, -1);
                 break;
             case '>':
-                add_program(p, INS_MOVE, 1);
+                add_program(p, MOVE, 1);
                 break;
             case '<':
-                add_program(p, INS_MOVE, -1);
+                add_program(p, MOVE, -1);
                 break;
             case '.':
-                add_program(p, INS_OUT, 0);
+                add_program(p, OUT_ASCII, 0);
                 break;
             case ',':
-                add_program(p, INS_IN, 0);
+                add_program(p, IN, 0);
                 break;
             case '[':
-                add_program(p, INS_BRANCH, 0);
+                add_program(p, BRANCH, 0);
                 break;
             case ']':
-                add_program(p, INS_JUMP, 0);
+                add_program(p, JUMP, 0);
                 break;
+
+            /* equal printf("%d", *ptr); */
+            case '$':
+                add_program(p, OUT_HEX, 0);
+                break;
+            /* comment */
+            case '/':
+                while ((c = fgetc(in)) != LF) {
+                }
+                break;
+
             default:
                 /* Nothing */
                 break;
         }
     }
     if (p->markers_count > 0) FATAL("unmatched '['");
-    add_program(p, INS_HALT, 0);
+    add_program(p, HALT, 0);
 }
 
 struct asmbuf *create_asmbuf(void);
@@ -249,7 +263,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
         long operand = program->ins[i].operand;
         table[i] = buf->fill;
         switch (ins) {
-            case INS_MOVE:
+            case MOVE:
                 if (operand > -256 && operand < 256) {
                     if (operand > 0) {
                         add_asmbuf_ins(buf, 3, 0x4883C6);  // add  rsi, byte X
@@ -268,7 +282,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
                     add_asmbuf_immediate(buf, 4, &operand);
                 }
                 break;
-            case INS_MUTATE:
+            case MUTATE:
                 if (operand > 0) {
                     add_asmbuf_ins(buf, 2, 0x8006);  // add  byte [rsi], X
                 } else {
@@ -277,21 +291,28 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
                 }
                 add_asmbuf_immediate(buf, 1, &operand);
                 break;
-            case INS_IN:
+            case IN:
                 add_asmbuf_ins(buf, 3, 0x4831FF);  // xor  rdi, rdi
                 add_asmbuf_syscall(buf, SYS_read);
                 break;
-            case INS_OUT:
+            case OUT_ASCII:
                 add_asmbuf_ins(buf, 3, 0x4C89E7);  // mov  rdi, r12
                 add_asmbuf_syscall(buf, SYS_write);
                 break;
-            case INS_BRANCH: {
+
+            /* output buffer as hex*/
+            case OUT_HEX:
+                add_asmbuf_ins(buf, 3, 0x4C89E7);  // mov  rdi, r12
+                add_asmbuf_syscall(buf, SYS_write);
+                break;
+
+            case BRANCH: {
                 uint32_t delta = 0;
                 add_asmbuf_ins(buf, 2, 0x381E);        // cmp  [rsi], bl
                 add_asmbuf_ins(buf, 2, 0x0F84);        // jz
                 add_asmbuf_immediate(buf, 4, &delta);  // patched by JUMP ']'
             } break;
-            case INS_JUMP: {
+            case JUMP: {
                 uint32_t delta = table[operand];
                 delta -= buf->fill + 5;
                 add_asmbuf_ins(buf, 1, 0xE9);  // jmp delta
@@ -300,7 +321,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
                 uint32_t patch = buf->fill - table[operand] - 8;
                 memcpy(jz, &patch, 4);  // patch previous branch '['
             } break;
-            case INS_HALT:
+            case HALT:
                 if (mode == MODE_FUNCTION) {
                     add_asmbuf_ins(buf, 3, 0x4881C4);  // add  rsp, X
                     add_asmbuf_immediate(buf, 4, &memory_size);
