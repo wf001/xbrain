@@ -104,8 +104,8 @@ void add_program(struct program *p, enum ins ins, long operand) {
     p->ins[p->count].operand = operand;
     p->count++;
     _sep();
-    _info(p->ins[p->count].ins, d);
-    _info(p->count, d);
+    //_info(p->ins[p->count].ins, d);
+    //_info(p->count, d);
 }
 
 void mark_program(struct program *p) {
@@ -302,8 +302,6 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
 
             /* output buffer as hex*/
             case OUT_HEX:
-                add_asmbuf_ins(buf, 3, 0x4C89E7);  // mov  rdi, r12
-                add_asmbuf_syscall(buf, SYS_write);
                 break;
 
             case BRANCH: {
