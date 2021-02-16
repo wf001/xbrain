@@ -2,7 +2,7 @@ bits 64
 global _start
 
 _start:
-    push 0x123
+    push 0x0
     mov rsi, rsp
 
     pop r13
