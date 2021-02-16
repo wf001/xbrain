@@ -342,6 +342,10 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 2, 0xEB00);   // jmp <print>
       // label <print>
       add_asmbuf_ins(buf, 3, 0x4889E6); // mov rsi, rsp
+      /*It must be remove because same instruction exists above, 
+       * but if this instruction removed, it fail to print
+       * (syscall write's return value are 0xfffffffffffffff7.)
+       */
       add_asmbuf_ins(buf, 3, 0x4C89E7); // mov rdi r12
       add_asmbuf_syscall(buf, SYS_write);
       add_asmbuf_ins(buf, 2, 0x415D);   // pop r13
@@ -350,7 +354,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 2, 0x7402);   // je (next instruction)
       add_asmbuf_ins(buf, 2, 0xEBE9);   // jmp <print>
       // <label> <finalize>
-      add_asmbuf_ins(buf, 2, 0x415D); //pop r13
+      add_asmbuf_ins(buf, 2, 0x6A00);   // push 0x00
       
       break;
 
