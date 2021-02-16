@@ -9,6 +9,10 @@ test:
 	./xbc ws/d.xb
 	./xbc ws/e.xb
 	./xbc ws/f.xb
+	./xbc ws/g.xb
+	./xbc ws/h.xb
+	./xbc ws/i.xb
+	./xbc ws/j.xb
 	./test_xbc.sh
 
 clean:
@@ -19,3 +23,7 @@ clean:
 	rm -rf ws/d
 	rm -rf ws/e
 	rm -rf ws/f
+	rm -rf ws/g
+	rm -rf ws/h
+	rm -rf ws/i
+	rm -rf ws/j
