@@ -39,6 +39,7 @@ enum ins {
   IN,
   OUT_ASCII,
   OUT_HEX,
+  AND,
   BRANCH,
   JUMP,
   HALT,
@@ -96,6 +97,7 @@ void add_program(struct program *p, enum ins ins, long operand) {
   case IN:
   case OUT_ASCII:
   case OUT_HEX:
+  case AND:
   case HALT:
     break;
   }
@@ -162,6 +164,9 @@ void parse_program(struct program *p, FILE *in) {
     case '/':
       while ((c = fgetc(in)) != LF) {
       }
+      break;
+    case '&':
+      add_program(p, AND, 0);
       break;
 
     default:
@@ -249,6 +254,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
 
   /* rsi - data pointer
    * rdi - syscall argument
+   * rdx - data size
    * rax - temp and store return value, syscall number
    * rbx - zero register
    * r12 - one register
@@ -262,7 +268,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
     long operand = program->ins[i].operand;
     _sep();
     _info(ins, d);
-    _info(operand,d);
+    _info(operand, d);
     table[i] = buf->fill;
     switch (ins) {
     case MOVE:
@@ -304,7 +310,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
 
     /* output rsi as hex*/
     case OUT_HEX:
-      //label <_start>
+      // label <_start>
       add_asmbuf_ins(buf, 2, 0x415D);   // pop r13
       add_asmbuf_ins(buf, 3, 0x4C89E8); // mov rax, r13
       add_asmbuf_ins(buf, 3, 0x4939DD); // cmp r13, rbx
@@ -342,7 +348,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 2, 0xEB00);   // jmp <print>
       // label <print>
       add_asmbuf_ins(buf, 3, 0x4889E6); // mov rsi, rsp
-      /*It must be remove because same instruction exists above, 
+      /*It must be remove because same instruction exists above,
        * but if this instruction removed, it fail to print
        * (syscall write's return value are 0xfffffffffffffff7.)
        */
@@ -354,10 +360,18 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 2, 0x7402);   // je (next instruction)
       add_asmbuf_ins(buf, 2, 0xEBE9);   // jmp <print>
       // <label> <finalize>
-      add_asmbuf_ins(buf, 2, 0x6A00);   // push 0x00
-      
-      break;
+      add_asmbuf_ins(buf, 2, 0x6A00); // push 0x00
 
+      break;
+    case AND: {
+      add_asmbuf_ins(buf, 1, 0x58);             // pop rax
+      add_asmbuf_ins(buf, 3, 0x4989C7);         // mov r15, rax
+      add_asmbuf_ins(buf, 7, 0x4981E7FF000000); // and r15, 0xff
+      add_asmbuf_ins(buf, 4, 0x48C1F808);       // sar rax,0x8
+      add_asmbuf_ins(buf, 3, 0x4C21F8);         // and rax,r15
+      add_asmbuf_ins(buf, 1, 0x50);             // push rax
+
+    } break;
     case BRANCH: {
       uint32_t delta = 0;
       add_asmbuf_ins(buf, 2, 0x381E);       // cmp  [rsi], bl
