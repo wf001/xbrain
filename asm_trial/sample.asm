@@ -1,6 +1,6 @@
 bits 64
 global _start
-// do AND operation, then output it with hex format.
+; do AND operation, then output it with hex format.
 _start:
     mov rax, 0x77FFAC
     and rax, 0x39333AA

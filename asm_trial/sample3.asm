@@ -3,12 +3,11 @@ global _start
 
 _start:
     mov rsi, rsp
-    push 0x41C8
+    push 0x10
     pop rax
-    mov r15, rax
-    and r15, 0xff
-    sar rax,8
-    and rax,r15
+    not rax
+    mov r13, 0x15
+    and rax,r13
     push rax
 
     mov rax, 0x3c
