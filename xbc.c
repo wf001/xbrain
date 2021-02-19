@@ -40,6 +40,7 @@ enum ins {
   OUT_ASCII,
   OUT_HEX,
   AND,
+  OR,
   BRANCH,
   JUMP,
   HALT,
@@ -98,6 +99,7 @@ void add_program(struct program *p, enum ins ins, long operand) {
   case OUT_ASCII:
   case OUT_HEX:
   case AND:
+  case OR:
   case HALT:
     break;
   }
@@ -156,17 +158,22 @@ void parse_program(struct program *p, FILE *in) {
       add_program(p, JUMP, 0);
       break;
 
-    /* equal printf("%h", *ptr); */
+      /* equal printf("%h", *ptr); */
     case '$':
       add_program(p, OUT_HEX, 0);
       break;
-    /* comment */
+      /* comment */
     case '/':
       while ((c = fgetc(in)) != LF) {
       }
       break;
+      /* and operation */
     case '&':
       add_program(p, AND, 0);
+      break;
+      /* or operation */
+    case '|':
+      add_program(p, OR, 0);
       break;
 
     default:
@@ -223,6 +230,15 @@ void add_asmbuf_syscall(struct asmbuf *buf, int syscall) {
     add_asmbuf_immediate(buf, 4, &n);
   }
   add_asmbuf_ins(buf, 2, 0x0F05); // syscall
+}
+void add_asmbuf_logical_set_up(struct asmbuf *buf) {
+  add_asmbuf_ins(buf, 1, 0x58);             // pop rax
+  add_asmbuf_ins(buf, 3, 0x4989C7);         // mov r15, rax
+  add_asmbuf_ins(buf, 7, 0x4981E7FF000000); // and r15, 0xff
+  add_asmbuf_ins(buf, 4, 0x48C1F808);       // sar rax,0x8
+}
+void add_asmbuf_logical_clean_up(struct asmbuf *buf) {
+  add_asmbuf_ins(buf, 1, 0x50); // push rax
 }
 
 struct asmbuf *compile(const struct program *, enum mode);
@@ -308,7 +324,7 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_syscall(buf, SYS_write);
       break;
 
-    /* output rsi as hex*/
+      /* output rsi as hex*/
     case OUT_HEX:
       // label <_start>
       add_asmbuf_ins(buf, 2, 0x415D);   // pop r13
@@ -359,18 +375,18 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 3, 0x4939DE); // cmp r14, rbx
       add_asmbuf_ins(buf, 2, 0x7402);   // je (next instruction)
       add_asmbuf_ins(buf, 2, 0xEBE9);   // jmp <print>
-      // <label> <finalize>
+      // label <finalize>
       add_asmbuf_ins(buf, 2, 0x6A00); // push 0x00
-
       break;
     case AND: {
-      add_asmbuf_ins(buf, 1, 0x58);             // pop rax
-      add_asmbuf_ins(buf, 3, 0x4989C7);         // mov r15, rax
-      add_asmbuf_ins(buf, 7, 0x4981E7FF000000); // and r15, 0xff
-      add_asmbuf_ins(buf, 4, 0x48C1F808);       // sar rax,0x8
-      add_asmbuf_ins(buf, 3, 0x4C21F8);         // and rax,r15
-      add_asmbuf_ins(buf, 1, 0x50);             // push rax
-
+      add_asmbuf_logical_set_up(buf);
+      add_asmbuf_ins(buf, 3, 0x4C21F8); // and rax,r15
+      add_asmbuf_logical_clean_up(buf);
+    } break;
+    case OR: {
+      add_asmbuf_logical_set_up(buf);
+      add_asmbuf_ins(buf, 3, 0x4C09F8); // and rax,r15
+      add_asmbuf_logical_clean_up(buf);
     } break;
     case BRANCH: {
       uint32_t delta = 0;
