@@ -15,6 +15,7 @@ test:
 	@./xbc ws/j.xb
 	@./xbc ws/k.xb
 	@./xbc ws/l.xb
+	@./xbc ws/m.xb
 	@./test_xbc.sh
 
 clean:
@@ -32,4 +33,5 @@ clean:
 	@rm -rf ws/j
 	@rm -rf ws/k
 	@rm -rf ws/l
+	@rm -rf ws/m
 	@rm -rf peda*

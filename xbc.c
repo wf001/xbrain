@@ -106,8 +106,6 @@ void add_program(struct program *p, enum ins ins, long operand) {
   p->ins[p->count].ins = ins;
   p->ins[p->count].operand = operand;
   p->count++;
-  //_info(p->ins[p->count].ins, d);
-  //_info(p->count, d);
 }
 
 void mark_program(struct program *p) {
@@ -157,21 +155,16 @@ void parse_program(struct program *p, FILE *in) {
     case ']':
       add_program(p, JUMP, 0);
       break;
-
-      /* equal printf("%h", *ptr); */
-    case '$':
-      add_program(p, OUT_HEX, 0);
-      break;
-      /* comment */
     case '/':
       while ((c = fgetc(in)) != LF) {
       }
       break;
-      /* and operation */
+    case '$':
+      add_program(p, OUT_HEX, 0);
+      break;
     case '&':
       add_program(p, AND, 0);
       break;
-      /* or operation */
     case '|':
       add_program(p, OR, 0);
       break;
@@ -364,9 +357,10 @@ struct asmbuf *compile(const struct program *program, enum mode mode) {
       add_asmbuf_ins(buf, 2, 0xEB00);   // jmp <print>
       // label <print>
       add_asmbuf_ins(buf, 3, 0x4889E6); // mov rsi, rsp
-      /*It must be remove because same instruction exists above,
-       * but if this instruction removed, it fail to print
-       * (syscall write's return value are 0xfffffffffffffff7.)
+      /*this sentence must be remove because same operation exists above.
+       * But when this sentence removed, it fail to print
+       * (syscall write's return value are 0xfffffffffffffff7.),
+       * so remain as it is.
        */
       add_asmbuf_ins(buf, 3, 0x4C89E7); // mov rdi r12
       add_asmbuf_syscall(buf, SYS_write);
@@ -506,23 +500,23 @@ int main(int argc, char **argv) {
 
   struct program program = PROGRAM_INIT;
   FILE *source = fopen(argv[optind], "r");
+
   if (source == NULL)
     FATAL("could not open input file");
-  // PARSE
+
   parse_program(&program, source);
   fclose(source);
-
-  // COMPILE
   struct asmbuf *buf = compile(&program, MODE_STANDALONE);
-  // BUILD
   FILE *elf = fopen(output, "wb");
+
   if (elf == NULL)
     FATAL("could not open output file");
+
   write_elf(buf, elf);
   fchmod(fileno(elf), 0755);
   fclose(elf);
   free_asmbuf(buf);
-
   free_program(&program);
+
   return 0;
 }
