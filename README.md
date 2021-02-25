@@ -4,7 +4,7 @@
 XBrain is an open source programming language inspired by Brainfuck. 
 
 <div align="center">
-<img src="https://i.imgur.com/5mutj7h.png" alt="xbrain logo">
+<img src="https://i.imgur.com/CD9bYFx.png" alt="xbrain logo">
 </div>
 
 

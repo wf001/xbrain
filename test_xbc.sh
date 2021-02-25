@@ -2,14 +2,16 @@
 
 ope_arr=("a" "b" "c" "d" \
     "e" "f" "g" "h" \
-    "i" "j" "k" "l")
+    "i" "j" "k" "l"
+    "m")
 
             # a-d
 expect_arr=(3 0 "Hello World!" 8 \
     # e-h
     0x15 "G" 0x0 0x4 \
     # i-l
-    0xFF 0x10x1 0x20 0x37 )
+    0xFF 0x10x1 0x20 0x37 
+    0x3)
 
 prefix="./ws/"
 exit_code=0
@@ -17,7 +19,7 @@ exit_code=0
 echo "Starting test."
 echo 
 
-for i in {0..11}; do
+for i in {0..12}; do
     res=$(${prefix}${ope_arr[i]})
     expect=${expect_arr[i]}
 
