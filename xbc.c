@@ -456,9 +456,9 @@ void write_elf(struct asmbuf *buf, FILE *elf) {
 }
 
 void print_help(const char *argv0, FILE *o) {
-  fprintf(o, "Usage: %s [-o <file>] [-h] \n", argv0);
-  fprintf(o, "  -o <file>    executable output file name\n");
-  fprintf(o, "  -h           print this usage information\n");
+  fprintf(o, "Version: 1.0, Intel-x86 64bit \nUsage: %s [-o <file>] [-h] \n", argv0);
+  fprintf(o, "  -o <file>    Executable output file name\n");
+  fprintf(o, "  -h           Print this usage information\n");
 }
 
 int main(int argc, char **argv) {
@@ -469,10 +469,13 @@ int main(int argc, char **argv) {
 
   /* Parse arguments */
   int option;
-  while ((option = getopt(argc, argv, "o:eiDhO:")) != -1) {
+  while ((option = getopt(argc, argv, "ho:")) != -1) {
     switch (option) {
     case 'o':
       output = optarg;
+      break;
+    case 'h':
+      print_help(argv[0], stderr);
       break;
     default:
       print_help(argv[0], stderr);
